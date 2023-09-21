@@ -1,0 +1,10 @@
+name: napari-rembg
+display_name: Napari Remove Background
+contributions:
+  commands:
+    - id: napari-rembg.rembg
+      title: Remove background
+      python_name: napari_rembg:RemBGWidget
+  widgets:
+    - command: napari-rembg.rembg
+      display_name: Remove background
