@@ -1,10 +1,14 @@
 name: napari-rembg
-display_name: Napari Remove Background
+display_name: Napari Select foreground
 contributions:
   commands:
     - id: napari-rembg.rembg
-      title: Remove background
+      title: Select foreground
       python_name: napari_rembg:RemBGWidget
   widgets:
     - command: napari-rembg.rembg
-      display_name: Remove background
+      display_name: Select foreground
+  sample_data:
+    - key: napari
+      display_name: Tabueran Kiribati
+      uri: https://upload.wikimedia.org/wikipedia/commons/d/dc/Tabuaeran_Kiribati.jpg

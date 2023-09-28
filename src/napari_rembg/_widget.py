@@ -19,7 +19,7 @@ def rembg_predict(image: np.ndarray) -> np.ndarray:
     seg = seg.astype(np.uint8)
     return seg
 
-@register_dock_widget(menu="RemBG > Remove background")
+@register_dock_widget(menu="RemBG > Select foreground")
 class RemBGWidget(QWidget):
     def __init__(self, napari_viewer):
         super().__init__()
@@ -37,7 +37,7 @@ class RemBGWidget(QWidget):
         grid_layout.addWidget(self.cb_image, 0, 1)
 
         # Compute button
-        self.remove_background_btn = QPushButton("Remove background", self)
+        self.remove_background_btn = QPushButton("Select foreground", self)
         self.remove_background_btn.clicked.connect(self._trigger_remove_background)
         grid_layout.addWidget(self.remove_background_btn, 1, 0, 1, 2)
 

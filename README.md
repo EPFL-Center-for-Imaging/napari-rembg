@@ -1,10 +1,10 @@
 # napari-rembg
 
-Remove the background of images using AI in Napari. This plugin is based on the [rembg](https://github.com/danielgatis/rembg) project.
+Select the foreground of images using AI in Napari. This plugin is based on the [rembg](https://github.com/danielgatis/rembg) project.
 
-<!-- <p align="center">
-    <img src="assets/gif01.gif" height="400">
-</p> -->
+<p align="center">
+    <img src="assets/demo.gif" height="400">
+</p>
 
 ----------------------------------
 
@@ -24,7 +24,7 @@ the coverage at least stays the same before you submit a pull request.
 ## License
 
 Distributed under the terms of the [BSD-3] license,
-"napari-label-focus" is free and open source software
+"napari-rembg" is free and open source software
 
 ## Issues
 
