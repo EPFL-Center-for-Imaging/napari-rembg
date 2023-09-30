@@ -16,7 +16,7 @@ Select the foreground of images using AI in Napari. This plugin is based on the 
 
 ### Why use `napari-rembg`?
 - It runs **fast** even on a laptop's CPU (a few seconds per image).
-- It is **easy to install** compared to other AI tools.
+- It is **easy to install** compared to other AI tools for segmentation.
 - It is a **quick and easy** solution to automatically extract the foreground of scientific and natural images.
 
 ## Installation
