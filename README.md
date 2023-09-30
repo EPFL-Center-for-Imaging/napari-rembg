@@ -6,9 +6,10 @@ Select the foreground of images using AI in Napari. This plugin is based on the 
     <img src="assets/demo.gif" height="400">
 </p>
 
-----------------------------------
-
-This [napari] plugin was generated with [Cookiecutter] using [@napari]'s [cookiecutter-napari-plugin] template.
+### Why use `napari-rembg`?
+- It runs **fast** even on a laptop's CPU (a few seconds per image).
+- It is **easy to install** compared to other AI tools.
+- It is a **quick and easy** solution to automatically extract the foreground of scientific and natural images.
 
 ## Installation
 
@@ -16,15 +17,22 @@ You can install `napari-rembg` via [pip]:
 
     pip install napari-rembg
 
+## Usage
+
+Start `napari-rembg` from the `Plugins` menu of Napari:
+
+```
+Plugins > Select foreground (napari-rembg)
+```
+
 ## Contributing
 
-Contributions are very welcome. Tests can be run with [tox], please ensure
-the coverage at least stays the same before you submit a pull request.
+Contributions are very welcome. Please get in touch if you'd like to be involved in improving or extending the package.
 
 ## License
 
 Distributed under the terms of the [BSD-3] license,
-"napari-rembg" is free and open source software
+"napari-rembg" is free and open source software.
 
 ## Issues
 
@@ -45,3 +53,7 @@ If you encounter any problems, please file an issue along with a detailed descri
 [tox]: https://tox.readthedocs.io/en/latest/
 [pip]: https://pypi.org/project/pip/
 [PyPI]: https://pypi.org/
+
+----------------------------------
+
+This [napari] plugin was generated with [Cookiecutter] using [@napari]'s [cookiecutter-napari-plugin] template.
