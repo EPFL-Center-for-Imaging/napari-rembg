@@ -4,7 +4,6 @@ import PIL
 import rembg
 from napari.qt.threading import thread_worker
 import napari.layers
-from napari_tools_menu import register_dock_widget
 from qtpy.QtWidgets import QComboBox, QGridLayout, QWidget, QSizePolicy, QLabel, QPushButton, QProgressBar
 from qtpy.QtCore import Qt
 
@@ -19,7 +18,6 @@ def rembg_predict(image: np.ndarray) -> np.ndarray:
     seg = seg.astype(np.uint8)
     return seg
 
-@register_dock_widget(menu="RemBG > Select foreground")
 class RemBGWidget(QWidget):
     def __init__(self, napari_viewer):
         super().__init__()

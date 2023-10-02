@@ -10,9 +10,9 @@ If you need some help writing a good description, check out our
 
 Select the foreground of images using AI in Napari. This plugin is based on the [rembg](https://github.com/danielgatis/rembg) project.
 
-<p align="center">
+<!-- <p align="center">
     <img src="../assets/demo.gif" height="400">
-</p>
+</p> -->
 
 ### Why use `napari-rembg`?
 - It runs **fast** even on a laptop's CPU (a few seconds per image).
