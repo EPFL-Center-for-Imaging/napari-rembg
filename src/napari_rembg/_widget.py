@@ -1,6 +1,5 @@
 import numpy as np
-import PIL
-import rembg
+
 from napari.qt.threading import thread_worker
 import napari
 import napari.layers
@@ -8,13 +7,7 @@ from qtpy.QtWidgets import QComboBox, QGridLayout, QWidget, QSizePolicy, QLabel,
 from qtpy.QtCore import Qt
 from skimage.measure import regionprops_table
 
-def rembg_predict(image: np.ndarray) -> np.ndarray:
-    """Binary segmentation using rembg."""
-    seg = np.array(rembg.remove(PIL.Image.fromarray(image), post_process_mask=True))
-    seg = np.mean(seg, axis=2)
-    seg[seg != 0] = 1
-    seg = seg.astype(np.uint8)
-    return seg
+from ._rembg import rembg_predict
 
 class RemBGWidget(QWidget):
     def __init__(self, napari_viewer):
@@ -128,7 +121,7 @@ class RemBGWidget(QWidget):
     @property
     def selected_label(self):
         if self.labels_layer is None:
-            return
+            return 1
         
         return self.labels_layer.selected_label
             
@@ -159,40 +152,41 @@ class RemBGWidget(QWidget):
             self.shapes_layer = self.viewer.layers[self.cb_roi.currentText()]
 
     def _on_slice_change(self, event):
-        """In 3D mode, remove the rectangle ROI on slice change."""
-        if self.shapes_layer is not None \
-            and self.shapes_layer.nshapes == 1 \
-            and self.shapes_layer.shape_type[0] == 'rectangle':
-                self.shapes_layer.data = []
-                self.shapes_layer.refresh()
+        """In 3D mode, reset the ROI layer on slice change."""
+        if self.shapes_layer is not None:
+            self.shapes_layer.data = []
+            self.shapes_layer.refresh()
 
     @thread_worker
     def _remove_background(self) -> np.ndarray:
-        image_data_slice_roi_adjusted = self.image_data_slice.copy()
+        image_data_slice = self.image_data_slice.copy()
 
         if self.shapes_layer is not None \
-            and self.shapes_layer.nshapes == 1 \
-            and self.shapes_layer.shape_type[0] == 'rectangle' \
-            and not (self.ndim == 3) & (self.axes[0] != 0):  # The shapes to_label() don't work in transposed dimensions; see issue #5505
+            and not (self.ndim == 3) & (self.axes[0] != 0): # The shapes to_label() don't work in transposed dimensions; see issue #5505
 
-                roi_mask = self.shapes_layer.to_labels().astype(np.uint8)
+            roi_mask = self.shapes_layer.to_labels().astype(np.uint8)
                 
-                if self.ndim == 3:
-                    roi_mask = np.max(roi_mask.transpose(self.axes), axis=0)
-                                
-                bbox = regionprops_table(roi_mask, properties=['bbox'])
+            if self.ndim == 3:
+                roi_mask = np.max(roi_mask.transpose(self.axes), axis=0)
+                            
+            bbox = regionprops_table(roi_mask, properties=['bbox'])
 
-                x0 = int(bbox['bbox-0'][0])
-                y0 = int(bbox['bbox-1'][0])
-                x1 = int(bbox['bbox-2'][0])
-                y1 = int(bbox['bbox-3'][0])
+            segmentation = np.zeros(np.array(image_data_slice.shape)[:2], dtype=np.uint8)
 
-                segmentation = np.zeros(np.array(image_data_slice_roi_adjusted.shape)[:2], dtype=np.uint8)
-                image_data_slice_roi_adjusted = image_data_slice_roi_adjusted[x0:x1, y0:y1]
-                segmentation_roi_adjusted = rembg_predict(image_data_slice_roi_adjusted)
+            for shape_idx in range(self.shapes_layer.nshapes):
+                x0 = int(bbox['bbox-0'][shape_idx])
+                y0 = int(bbox['bbox-1'][shape_idx])
+                x1 = int(bbox['bbox-2'][shape_idx])
+                y1 = int(bbox['bbox-3'][shape_idx])
+
+                image_data_slice_roi_adjusted = image_data_slice[x0:x1, y0:y1].copy()
+                segmentation_roi_adjusted = rembg_predict(image_data_slice_roi_adjusted, is_rgb=self.image_layer.rgb)
+                segmentation_roi_adjusted *= self.selected_label + shape_idx
+                
                 segmentation[x0:x1, y0:y1] = segmentation_roi_adjusted
         else:
-            segmentation = rembg_predict(image_data_slice_roi_adjusted)
+            segmentation = rembg_predict(image_data_slice, is_rgb=self.image_layer.rgb)
+            segmentation *= self.selected_label
         
         return segmentation
     
@@ -211,6 +205,7 @@ class RemBGWidget(QWidget):
             self.shapes_layer = None
 
         self.pbar.setMaximum(0)
+
         worker = self._remove_background()
         worker.returned.connect(self._thread_returned)
         worker.start()
@@ -224,12 +219,11 @@ class RemBGWidget(QWidget):
         else:
             self.labels_layer = self.viewer.layers[self.cb_result.currentText()]
 
-        mask = segmentation > 0
-
+        ### For multiple ROIs
         if self.ndim == 2:
-            self.labels_layer.data[mask] = self.selected_label
+            self.labels_layer.data += segmentation
         elif self.ndim == 3:
-            self.labels_layer.data.transpose(self.axes)[self.current_step][mask] = self.selected_label
+            self.labels_layer.data.transpose(self.axes)[self.current_step] += segmentation
 
         self.labels_layer.refresh()
 
