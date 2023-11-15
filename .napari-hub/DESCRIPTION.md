@@ -11,7 +11,7 @@ If you need some help writing a good description, check out our
 Select the foreground of images using AI in Napari. This plugin is based on the [rembg](https://github.com/danielgatis/rembg) project.
 
 <p align="center">
-    <img src="https://github.com/MalloryWittwer/napari-rembg/blob/main/assets/demo.gif?raw=true" height="400">
+    <img src="https://github.com/EPFL-Center-for-Imaging/napari-rembg/blob/main/assets/demo.gif" height="400">
 </p>
 
 ### Why use `napari-rembg`?
