@@ -13,6 +13,15 @@ Select the foreground of images using AI in Napari. This plugin is based on the 
 
 This plugin is primarily intended for analyzing **2D** and **2D (RGB)** images, however it can also be used to segment a particular slice in a **2D + time**, **2D + channel** or **3D** image.
 
+## New!
+
+Run `rembg` in individual regions of interest defined by bounding boxes to segment multiple objects:
+
+<p align="center">
+    <img src="https://github.com/EPFL-Center-for-Imaging/napari-rembg/blob/main/assets/screenshot.gif" height="400">
+</p>
+
+
 ## Installation
 
 You can install `napari-rembg` via [pip]:

@@ -3,7 +3,7 @@ import numpy as np
 from napari.qt.threading import thread_worker
 import napari
 import napari.layers
-from qtpy.QtWidgets import QComboBox, QGridLayout, QWidget, QSizePolicy, QLabel, QPushButton, QProgressBar
+from qtpy.QtWidgets import QComboBox, QGridLayout, QWidget, QSizePolicy, QLabel, QPushButton, QProgressBar, QCheckBox
 from qtpy.QtCore import Qt
 from skimage.measure import regionprops_table
 from napari.utils.notifications import show_info
@@ -45,15 +45,20 @@ class RemBGWidget(QWidget):
         self.create_roi_layer_btn.clicked.connect(self._create_roi_layer)
         grid_layout.addWidget(self.create_roi_layer_btn, 2, 2)
 
+        grid_layout.addWidget(QLabel("Auto-increment label index", self), 3, 0)
+        self.check_label_increment = QCheckBox()
+        self.check_label_increment.setChecked(True)
+        grid_layout.addWidget(self.check_label_increment, 3, 1)
+
         # Compute button
         self.remove_background_btn = QPushButton("Select foreground", self)
         self.remove_background_btn.clicked.connect(self._trigger_remove_background)
-        grid_layout.addWidget(self.remove_background_btn, 3, 0, 1, 2)
+        grid_layout.addWidget(self.remove_background_btn, 4, 0, 1, 2)
 
         # Progress bar
         self.pbar = QProgressBar(self, minimum=0, maximum=1)
         self.pbar.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        grid_layout.addWidget(self.pbar, 4, 0, 1, 2)
+        grid_layout.addWidget(self.pbar, 5, 0, 1, 2)
 
         # Setup layer callbacks
         self.viewer.layers.events.inserted.connect(
@@ -66,12 +71,6 @@ class RemBGWidget(QWidget):
         self.viewer.dims.events.current_step.connect(self._on_slice_change)
 
         self.viewer.bind_key('s', lambda _: self._trigger_remove_background())
-
-        import skimage.data
-        self.viewer.add_image(skimage.data.coins())
-
-        # import tifffile
-        # self.viewer.add_image(tifffile.imread('/home/wittwer/Desktop/nuclei.tif'))
 
     @property
     def image_data(self):
@@ -218,8 +217,9 @@ class RemBGWidget(QWidget):
                     image_data_slice_roi_adjusted = image_data_slice[x0:x1, y0:y1].copy()
                     segmentation_roi_adjusted = rembg_predict(image_data_slice_roi_adjusted, is_rgb=self.image_layer.rgb)
                     segmentation_roi_adjusted *= self.selected_label
-                    new_label = self.selected_label + 1
-                    self.selected_label = new_label
+
+                    if self.check_label_increment.isChecked():
+                        self.selected_label = self.selected_label + 1
                     
                     segmentation[x0:x1, y0:y1] = segmentation_roi_adjusted
         else:
@@ -270,6 +270,5 @@ class RemBGWidget(QWidget):
             # Remove the shapes data once done
             self.shapes_layer.data = []
             self.viewer.layers.selection.active = self.shapes_layer
-            # self.shapes_layer.refresh()
 
         self.pbar.setMaximum(1)
