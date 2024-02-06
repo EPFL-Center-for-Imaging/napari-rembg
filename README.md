@@ -40,7 +40,7 @@ You can select the `Labels` layer in which to write the output of the foreground
 
 ## Contributing
 
-Contributions are very welcome. Please get in touch if you'd like to be involved in improving or extending the package.
+Contributions are very welcome. 
 
 ## License
 
