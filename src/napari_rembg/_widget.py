@@ -1,20 +1,14 @@
 import numpy as np
-import PIL
-import rembg
+
 from napari.qt.threading import thread_worker
 import napari
 import napari.layers
-from qtpy.QtWidgets import QComboBox, QGridLayout, QWidget, QSizePolicy, QLabel, QPushButton, QProgressBar
+from qtpy.QtWidgets import QComboBox, QGridLayout, QWidget, QSizePolicy, QLabel, QPushButton, QProgressBar, QCheckBox
 from qtpy.QtCore import Qt
 from skimage.measure import regionprops_table
+from napari.utils.notifications import show_info
 
-def rembg_predict(image: np.ndarray) -> np.ndarray:
-    """Binary segmentation using rembg."""
-    seg = np.array(rembg.remove(PIL.Image.fromarray(image), post_process_mask=True))
-    seg = np.mean(seg, axis=2)
-    seg[seg != 0] = 1
-    seg = seg.astype(np.uint8)
-    return seg
+from ._rembg import rembg_predict, rembg_predict_sam
 
 class RemBGWidget(QWidget):
     def __init__(self, napari_viewer):
@@ -42,21 +36,29 @@ class RemBGWidget(QWidget):
         grid_layout.addWidget(QLabel("Mask (Labels, optional)", self), 1, 0)
         grid_layout.addWidget(self.cb_result, 1, 1)
 
-        # Region of interest
+        # Regions of interest
         self.cb_roi = QComboBox()
         self.cb_roi.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        grid_layout.addWidget(QLabel("ROI (Shapes, optional)", self), 2, 0)
+        grid_layout.addWidget(QLabel("ROIs (Shapes, optional)", self), 2, 0)
         grid_layout.addWidget(self.cb_roi, 2, 1)
+        self.create_roi_layer_btn = QPushButton("Add", self)
+        self.create_roi_layer_btn.clicked.connect(self._create_roi_layer)
+        grid_layout.addWidget(self.create_roi_layer_btn, 2, 2)
+
+        grid_layout.addWidget(QLabel("Auto-increment label index", self), 3, 0)
+        self.check_label_increment = QCheckBox()
+        self.check_label_increment.setChecked(True)
+        grid_layout.addWidget(self.check_label_increment, 3, 1)
 
         # Compute button
         self.remove_background_btn = QPushButton("Select foreground", self)
         self.remove_background_btn.clicked.connect(self._trigger_remove_background)
-        grid_layout.addWidget(self.remove_background_btn, 3, 0, 1, 2)
+        grid_layout.addWidget(self.remove_background_btn, 4, 0, 1, 2)
 
         # Progress bar
         self.pbar = QProgressBar(self, minimum=0, maximum=1)
         self.pbar.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        grid_layout.addWidget(self.pbar, 4, 0, 1, 2)
+        grid_layout.addWidget(self.pbar, 5, 0, 1, 2)
 
         # Setup layer callbacks
         self.viewer.layers.events.inserted.connect(
@@ -67,6 +69,8 @@ class RemBGWidget(QWidget):
         self._on_layer_change(None)
 
         self.viewer.dims.events.current_step.connect(self._on_slice_change)
+
+        self.viewer.bind_key('s', lambda _: self._trigger_remove_background())
 
     @property
     def image_data(self):
@@ -131,6 +135,27 @@ class RemBGWidget(QWidget):
             return 1
         
         return self.labels_layer.selected_label
+
+    @selected_label.setter
+    def selected_label(self, selected_label):
+        if self.labels_layer is None:
+            return
+        
+        self.labels_layer.selected_label = selected_label
+        self.labels_layer.refresh()
+    
+    def _create_roi_layer(self):
+        self.shapes_layer = self.viewer.add_shapes(
+            data=None, 
+            shape_type='rectangle',
+            edge_width=2,
+            edge_color='red',
+            face_color='transparent',
+            name='ROIs (draw rectangles)',
+            ndim=self.ndim
+        )
+        self.shapes_layer.mode = "add_rectangle"
+        self.shapes_layer.refresh()
             
     def _on_layer_change(self, e):
         self.cb_image.clear()
@@ -168,31 +193,45 @@ class RemBGWidget(QWidget):
     def _remove_background(self) -> np.ndarray:
         image_data_slice = self.image_data_slice.copy()
 
-        # The shapes to_label() don't work in transposed dimensions; see issue #5505
-        if self.shapes_layer is not None \
-            and not (self.ndim == 3) & (self.axes[0] != 0):
-
-            roi_mask = self.shapes_layer.to_labels().astype(np.uint8)
+        if self.shapes_layer is not None:
+            if (self.ndim == 3) & (self.axes[0] != 0): # The shapes to_labels() don't work in transposed dimensions; see issue #5505
+                show_info("ROIs don't work in transposed images!")
+                return None
+            else:
+                roi_mask = self.shapes_layer.to_labels().astype(np.uint8)
+                    
+                if self.ndim == 3:
+                    roi_mask = np.max(roi_mask.transpose(self.axes), axis=0)
                 
-            if self.ndim == 3:
-                roi_mask = np.max(roi_mask.transpose(self.axes), axis=0)
-                            
-            bbox = regionprops_table(roi_mask, properties=['bbox'])
+                roi_mask = np.squeeze(roi_mask)
+                bbox = regionprops_table(roi_mask, properties=['bbox'])
 
-            segmentation = np.zeros(np.array(image_data_slice.shape)[:2], dtype=np.uint8)
+                segmentation = np.zeros(np.array(image_data_slice.shape)[:2], dtype=np.uint8)
 
-            for shape_idx in range(self.shapes_layer.nshapes):
-                x0 = int(bbox['bbox-0'][shape_idx])
-                y0 = int(bbox['bbox-1'][shape_idx])
-                x1 = int(bbox['bbox-2'][shape_idx])
-                y1 = int(bbox['bbox-3'][shape_idx])
+                for shape_idx in range(self.shapes_layer.nshapes):
+                    x0 = int(bbox['bbox-0'][shape_idx])
+                    y0 = int(bbox['bbox-1'][shape_idx])
+                    x1 = int(bbox['bbox-2'][shape_idx])
+                    y1 = int(bbox['bbox-3'][shape_idx])
 
-                image_data_slice_roi_adjusted = image_data_slice[x0:x1, y0:y1]
-                segmentation_roi_adjusted = rembg_predict(image_data_slice_roi_adjusted)
-                segmentation_roi_adjusted *= self.selected_label + shape_idx
-                segmentation[x0:x1, y0:y1] = segmentation_roi_adjusted
+                    image_data_slice_roi_adjusted = image_data_slice[x0:x1, y0:y1].copy()
+                    segmentation_roi_adjusted = rembg_predict(image_data_slice_roi_adjusted, is_rgb=self.image_layer.rgb)
+                    segmentation_roi_adjusted *= self.selected_label
+
+                    if self.check_label_increment.isChecked():
+                        self.selected_label = self.selected_label + 1
+                    
+                    segmentation[x0:x1, y0:y1] = segmentation_roi_adjusted
         else:
-            segmentation = rembg_predict(image_data_slice_roi_adjusted)
+            segmentation = rembg_predict(image_data_slice, is_rgb=self.image_layer.rgb)
+
+            # # To be worked out:
+            # input_points = self.viewer.layers['Points'].data
+            # input_labels = np.ones((len(input_points)))
+            # segmentation = rembg_predict_sam(image_data_slice, is_rgb=self.image_layer.rgb, 
+            #     input_labels=input_labels, input_points=input_points
+            # )
+
             segmentation *= self.selected_label
         
         return segmentation
@@ -211,12 +250,6 @@ class RemBGWidget(QWidget):
         else:
             self.shapes_layer = None
 
-        self.pbar.setMaximum(0)
-        worker = self._remove_background()
-        worker.returned.connect(self._thread_returned)
-        worker.start()
-
-    def _thread_returned(self, segmentation):
         if self.cb_result.currentText() == '':
             if self.image_layer.rgb is True:
                 self.labels_layer = self.viewer.add_labels(np.zeros_like(np.mean(self.image_data, axis=2), dtype=np.int_), name='Foreground mask')
@@ -225,12 +258,25 @@ class RemBGWidget(QWidget):
         else:
             self.labels_layer = self.viewer.layers[self.cb_result.currentText()]
 
-        ### For multiple ROIs
-        if self.ndim == 2:
-            self.labels_layer.data += segmentation
-        elif self.ndim == 3:
-            self.labels_layer.data.transpose(self.axes)[self.current_step] += segmentation
+        self.pbar.setMaximum(0)
 
-        self.labels_layer.refresh()
+        worker = self._remove_background()
+        worker.returned.connect(self._thread_returned)
+        worker.start()
+
+    def _thread_returned(self, segmentation):
+        if segmentation is not None:
+            ### For multiple ROIs
+            if self.ndim == 2:
+                self.labels_layer.data += segmentation
+            elif self.ndim == 3:
+                self.labels_layer.data.transpose(self.axes)[self.current_step] += segmentation
+
+            self.labels_layer.refresh()
+
+        if self.shapes_layer is not None:
+            # Remove the shapes data once done
+            self.shapes_layer.data = []
+            self.viewer.layers.selection.active = self.shapes_layer
 
         self.pbar.setMaximum(1)

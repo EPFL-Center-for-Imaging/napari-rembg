@@ -1,6 +1,6 @@
 <!-- This file is a placeholder for customizing description of your plugin 
 on the napari hub if you wish. The readme file will be used by default if
-you wish not to do any customization for the napari hub listing.
+<!-- you wish not to do any customization for the napari hub listing. -->
 
 If you need some help writing a good description, check out our 
 [guide](https://github.com/chanzuckerberg/napari-hub/wiki/Writing-the-Perfect-Description-for-your-Plugin)
@@ -11,7 +11,7 @@ If you need some help writing a good description, check out our
 Select the foreground of images using AI in Napari. This plugin is based on the [rembg](https://github.com/danielgatis/rembg) project.
 
 <p align="center">
-    <img src="https://github.com/MalloryWittwer/napari-rembg/blob/main/assets/demo.gif?raw=true" height="400">
+    <img src="https://github.com/EPFL-Center-for-Imaging/napari-rembg/blob/main/assets/demo.gif" height="400">
 </p>
 
 ### Why use `napari-rembg`?

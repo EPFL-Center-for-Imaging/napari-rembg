@@ -1,9 +1,10 @@
+![EPFL Center for Imaging logo](https://imaging.epfl.ch/resources/logo-for-gitlab.svg)
 # napari-rembg
 
 Select the foreground of images using AI in Napari. This plugin is based on the [rembg](https://github.com/danielgatis/rembg) project.
 
 <p align="center">
-    <img src="https://github.com/MalloryWittwer/napari-rembg/blob/main/assets/demo.gif?raw=true" height="400">
+    <img src="https://github.com/EPFL-Center-for-Imaging/napari-rembg/blob/main/assets/demo.gif" height="400">
 </p>
 
 ### Why use `napari-rembg`?
@@ -12,6 +13,17 @@ Select the foreground of images using AI in Napari. This plugin is based on the 
 - It is a **quick and easy** solution to automatically extract the foreground of scientific and natural images.
 
 This plugin is primarily intended for analyzing **2D** and **2D (RGB)** images, however it can also be used to segment a particular slice in a **2D + time**, **2D + channel** or **3D** image.
+
+## New!
+
+Run `rembg` in individual regions of interest defined by bounding boxes to segment multiple objects:
+
+<p align="center">
+    <img src="https://github.com/EPFL-Center-for-Imaging/napari-rembg/blob/main/assets/screenshot.gif" height="400">
+</p>
+
+- Insert a `Shapes` layer and **draw rectangles** to define regions of interest (ROIs) in which to run the foreground selection. You can choose to auto-increment the label index to distinguish objects in different ROIs.
+- Select the `Labels` layer in which to write the output of the foreground segmentation (or let the plugin create a `Labels` layer automatically).
 
 ## Installation
 
@@ -26,17 +38,6 @@ Start `napari-rembg` from the `Plugins` menu of Napari:
 ```
 Plugins > Select foreground (napari-rembg)
 ```
-
-**Regions of Interest**
-
-You can insert a `Shapes` layer and **draw a rectangle** to define a Region of Interest (ROI) in which to run the foreground selection. Make sure to have only *a single rectangle* drawn in the `Shapes` layer 😉.
-
-*Minor issue*: until [#5505](https://github.com/napari/napari/issues/5505) is fixed it won't be possible to use ROIs drawn in planes other than the default (XY).
-
-**Multiple objects selection**
-
-You can select the `Labels` layer in which to write the output of the foreground segmentation. The output label of the foreground will be the selected label of that `Labels` layer. This makes it possible to run the foreground selection multiple times (e.g. along different channels or in multiple ROIs) and to combine the results in a single `Labels` layer.
-
 
 ## Contributing
 
