@@ -3,14 +3,14 @@ import numpy as np
 from napari.qt.threading import thread_worker
 import napari
 import napari.layers
-from qtpy.QtWidgets import QComboBox, QGridLayout, QWidget, QSizePolicy, QLabel, QPushButton, QProgressBar, QCheckBox
+from qtpy.QtWidgets import QComboBox, QGridLayout, QWidget, QSizePolicy, QLabel, QPushButton, QProgressBar, QCheckBox, QGroupBox, QLineEdit, QSpinBox
 from qtpy.QtCore import Qt
 from skimage.measure import regionprops_table
 from napari.utils.notifications import show_info
 
-from ._rembg import rembg_predict, rembg_predict_sam
+from ._api_client import rembg_predict_via_api
 
-class RemBGWidget(QWidget):
+class RemBGWidgetAPI(QWidget):
     def __init__(self, napari_viewer):
         super().__init__()
         self.viewer = napari_viewer
@@ -24,41 +24,61 @@ class RemBGWidget(QWidget):
         grid_layout.setAlignment(Qt.AlignTop)
         self.setLayout(grid_layout)
 
+        # API endpoint
+        api_group = QGroupBox(self)
+        api_group.setTitle("API settings")
+        api_layout = QGridLayout()
+        api_group.setLayout(api_layout)
+        api_group.layout().setContentsMargins(10, 10, 10, 10)
+        grid_layout.addWidget(api_group, 0, 0, 1, 2)
+
+        api_layout.addWidget(QLabel("Network", self), 0, 0)
+        self.network_field = QLineEdit(self)
+        self.network_field.setText('localhost')
+        api_layout.addWidget(self.network_field, 0, 1)
+
+        api_layout.addWidget(QLabel("Port", self), 1, 0)
+        self.port_field = QSpinBox(self)
+        self.port_field.setMinimum(1000)
+        self.port_field.setMaximum(100000)
+        self.port_field.setValue(8000)
+        api_layout.addWidget(self.port_field, 1, 1)
+
         # Image
         self.cb_image = QComboBox()
         self.cb_image.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        grid_layout.addWidget(QLabel("Image (2D / 3D / RGB)", self), 0, 0)
-        grid_layout.addWidget(self.cb_image, 0, 1)
+        grid_layout.addWidget(QLabel("Image (2D / 3D / RGB)", self), 1, 0)
+        grid_layout.addWidget(self.cb_image, 1, 1)
 
         # Result
         self.cb_result = QComboBox()
         self.cb_result.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        grid_layout.addWidget(QLabel("Mask (Labels, optional)", self), 1, 0)
-        grid_layout.addWidget(self.cb_result, 1, 1)
+        grid_layout.addWidget(QLabel("Mask (Labels, optional)", self), 2, 0)
+        grid_layout.addWidget(self.cb_result, 2, 1)
 
         # Regions of interest
         self.cb_roi = QComboBox()
         self.cb_roi.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        grid_layout.addWidget(QLabel("ROIs (Shapes, optional)", self), 2, 0)
-        grid_layout.addWidget(self.cb_roi, 2, 1)
+        grid_layout.addWidget(QLabel("ROIs (Shapes, optional)", self), 3, 0)
+        grid_layout.addWidget(self.cb_roi, 3, 1)
         self.create_roi_layer_btn = QPushButton("Add", self)
         self.create_roi_layer_btn.clicked.connect(self._create_roi_layer)
-        grid_layout.addWidget(self.create_roi_layer_btn, 2, 2)
+        grid_layout.addWidget(self.create_roi_layer_btn, 3, 2)
 
-        grid_layout.addWidget(QLabel("Auto-increment label index", self), 3, 0)
+        grid_layout.addWidget(QLabel("Auto-increment label index", self), 4, 0)
         self.check_label_increment = QCheckBox()
         self.check_label_increment.setChecked(True)
-        grid_layout.addWidget(self.check_label_increment, 3, 1)
+        grid_layout.addWidget(self.check_label_increment, 4, 1)
 
         # Compute button
         self.remove_background_btn = QPushButton("Select foreground", self)
         self.remove_background_btn.clicked.connect(self._trigger_remove_background)
-        grid_layout.addWidget(self.remove_background_btn, 4, 0, 1, 2)
+        grid_layout.addWidget(self.remove_background_btn, 5, 0, 1, 2)
 
         # Progress bar
         self.pbar = QProgressBar(self, minimum=0, maximum=1)
         self.pbar.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        grid_layout.addWidget(self.pbar, 5, 0, 1, 2)
+        grid_layout.addWidget(self.pbar, 6, 0, 1, 2)
 
         # Setup layer callbacks
         self.viewer.layers.events.inserted.connect(
@@ -70,7 +90,13 @@ class RemBGWidget(QWidget):
 
         self.viewer.dims.events.current_step.connect(self._on_slice_change)
 
-        self.viewer.bind_key('s', lambda _: self._trigger_remove_background())
+        # self.viewer.bind_key('s', lambda _: self._trigger_remove_background())
+
+    @property
+    def endpoint(self):
+        network = self.network_field.text()
+        port = self.port_field.value()
+        return f'http://{network}:{port}/process_image/'
 
     @property
     def image_data(self):
@@ -215,7 +241,7 @@ class RemBGWidget(QWidget):
                     y1 = int(bbox['bbox-3'][shape_idx])
 
                     image_data_slice_roi_adjusted = image_data_slice[x0:x1, y0:y1].copy()
-                    segmentation_roi_adjusted = rembg_predict(image_data_slice_roi_adjusted, is_rgb=self.image_layer.rgb)
+                    segmentation_roi_adjusted = rembg_predict_via_api(image_data_slice_roi_adjusted, self.endpoint, is_rgb=self.image_layer.rgb)
                     segmentation_roi_adjusted *= self.selected_label
 
                     if self.check_label_increment.isChecked():
@@ -223,7 +249,7 @@ class RemBGWidget(QWidget):
                     
                     segmentation[x0:x1, y0:y1] = segmentation_roi_adjusted
         else:
-            segmentation = rembg_predict(image_data_slice, is_rgb=self.image_layer.rgb)
+            segmentation = rembg_predict_via_api(image_data_slice, self.endpoint, is_rgb=self.image_layer.rgb)
 
             # # To be worked out:
             # input_points = self.viewer.layers['Points'].data

@@ -5,9 +5,14 @@ contributions:
     - id: napari-rembg.rembg
       title: Select foreground
       python_name: napari_rembg:RemBGWidget
+    - id: napari-rembg.rembg_api
+      title: Select foreground (API)
+      python_name: napari_rembg:RemBGWidgetAPI
   widgets:
     - command: napari-rembg.rembg
       display_name: Select foreground
+    - command: napari-rembg.rembg_api
+      display_name: Select foreground (API)
   sample_data:
     - key: napari
       display_name: Tabueran Kiribati
