@@ -3,10 +3,21 @@ import numpy as np
 from napari.qt.threading import thread_worker
 import napari
 import napari.layers
-from qtpy.QtWidgets import QComboBox, QGridLayout, QWidget, QSizePolicy, QLabel, QPushButton, QProgressBar, QCheckBox
+from qtpy.QtWidgets import (
+    QComboBox,
+    QGridLayout,
+    QWidget,
+    QSizePolicy,
+    QLabel,
+    QPushButton,
+    QProgressBar,
+    QCheckBox,
+)
 from qtpy.QtCore import Qt
 from skimage.measure import regionprops_table
 from napari.utils.notifications import show_info
+
+from skimage.exposure import rescale_intensity
 
 
 class GenericSegWidget(QWidget):
@@ -44,15 +55,20 @@ class GenericSegWidget(QWidget):
         self.create_roi_layer_btn.clicked.connect(self._create_roi_layer)
         grid_layout.addWidget(self.create_roi_layer_btn, 2, 2)
 
+        grid_layout.addWidget(QLabel("Auto-increment label index", self), 3, 0)
+        self.check_label_increment = QCheckBox()
+        self.check_label_increment.setChecked(True)
+        grid_layout.addWidget(self.check_label_increment, 3, 1)
+
         # Compute button
         self.run_btn = QPushButton("Run", self)
-        self.run_btn.clicked.connect(self._trigger_run)
-        grid_layout.addWidget(self.run_btn, 3, 0, 1, 2)
+        self.run_btn.clicked.connect(self._trigger_remove_background)
+        grid_layout.addWidget(self.run_btn, 4, 0, 1, 2)
 
         # Progress bar
         self.pbar = QProgressBar(self, minimum=0, maximum=1)
         self.pbar.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        grid_layout.addWidget(self.pbar, 4, 0, 1, 2)
+        grid_layout.addWidget(self.pbar, 5, 0, 1, 2)
 
         # Setup layer callbacks
         self.viewer.layers.events.inserted.connect(
@@ -64,19 +80,21 @@ class GenericSegWidget(QWidget):
 
         self.viewer.dims.events.current_step.connect(self._on_slice_change)
 
-        self.viewer.bind_key('s', lambda _: self._trigger_run())
+    @property
+    def segmentation_function(self, image):
+        return lambda image: np.zeros_like(image, dtype=np.uint8)
 
     @property
     def image_data(self):
         """The image data, adjusted to handle the RGB case."""
         if self.image_layer is None:
             return
-        
+
         if self.image_layer.data is None:
             return
 
         return self.image_layer.data
-    
+
     @property
     def is_in_3d_view(self):
         return self.viewer.dims.ndisplay == 3
@@ -84,165 +102,221 @@ class GenericSegWidget(QWidget):
     @property
     def dims_displayed(self):
         return list(self.viewer.dims.displayed)
-    
+
     @property
-    def ndim(self):        
+    def ndim(self):
         if self.image_data is None:
             return
-        
+
         if self.image_layer.rgb is True:
             return 2
         else:
             return self.image_layer.data.ndim
-    
+
     @property
     def axes(self):
         if self.is_in_3d_view:
             return
-        
+
         axes = self.dims_displayed
         if self.ndim == 3:
             axes.insert(0, list(set([0, 1, 2]) - set(self.dims_displayed))[0])
-        
+
         return axes
-    
+
     @property
     def current_step(self):
         """Current step, adjusted based on the layer transpose state."""
         return np.array(self.viewer.dims.current_step)[self.axes][0]
-    
+
     @property
     def image_data_slice(self):
-        """The currently visible 2D slice if the image is 3D, otherwise the image itself (if 2D)."""      
+        """The currently visible 2D slice if the image is 3D, otherwise the image itself (if 2D)."""
         if self.image_data is None:
             return
-        
+
         if self.ndim == 2:
             return self.image_data
-        
+
         elif self.ndim == 3:
             return self.image_data.transpose(self.axes)[self.current_step]
-    
+
     @property
     def selected_label(self):
         if self.labels_layer is None:
             return 1
-        
+
         return self.labels_layer.selected_label
 
     @selected_label.setter
     def selected_label(self, selected_label):
         if self.labels_layer is None:
             return
-        
+
         self.labels_layer.selected_label = selected_label
         self.labels_layer.refresh()
-    
+
     def _create_roi_layer(self):
         self.shapes_layer = self.viewer.add_shapes(
-            data=None, 
-            shape_type='rectangle',
+            data=None,
+            shape_type="rectangle",
             edge_width=2,
-            edge_color='red',
-            face_color='transparent',
-            name='ROIs (draw rectangles)',
-            ndim=self.ndim
+            edge_color="red",
+            face_color="transparent",
+            name="ROIs (draw rectangles)",
+            ndim=self.ndim,
         )
         self.shapes_layer.mode = "add_rectangle"
         self.shapes_layer.refresh()
-            
+        self.n_rectangles_drawn = self.shapes_layer.nshapes
+
+        # Add a call to trigger the segmentation when new rectangles are drawn.
+        self.shapes_layer.events.data.connect(self._handle_rectangle_drawn)
+
+    def _handle_rectangle_drawn(self, e):
+        n_rectangles_drawn = e.source.nshapes
+        if n_rectangles_drawn != self.n_rectangles_drawn:
+            self._trigger_remove_background()
+            self.n_rectangles_drawn = n_rectangles_drawn
+
     def _on_layer_change(self, e):
         self.cb_image.clear()
         for x in self.viewer.layers:
             if isinstance(x, napari.layers.Image):
                 if x.data.ndim in [2, 3]:
                     self.cb_image.addItem(x.name, x.data)
-        
-        if self.cb_image.currentText() != '':
+
+        if self.cb_image.currentText() != "":
             self.image_layer = self.viewer.layers[self.cb_image.currentText()]
-        
+
         self.cb_result.clear()
         for x in self.viewer.layers:
             if isinstance(x, napari.layers.Labels):
                 self.cb_result.addItem(x.name, x.data)
 
-        if self.cb_result.currentText() != '':
-            self.labels_layer = self.viewer.layers[self.cb_result.currentText()]
-        
+        if self.cb_result.currentText() != "":
+            self.labels_layer = self.viewer.layers[
+                self.cb_result.currentText()
+            ]
+
         self.cb_roi.clear()
         for x in self.viewer.layers:
             if isinstance(x, napari.layers.Shapes):
                 self.cb_roi.addItem(x.name, x.data)
-        
-        if self.cb_roi.currentText() != '':
+
+        if self.cb_roi.currentText() != "":
             self.shapes_layer = self.viewer.layers[self.cb_roi.currentText()]
 
+    def _on_slice_change(self, event):
+        """In 3D mode, reset the ROI layer on slice change."""
+        if self.shapes_layer is not None:
+            self.shapes_layer.data = []
+            self.shapes_layer.refresh()
 
     def image_data_slice_rois(self):
         """
         Yields all the ROIs of the Shapes layer.
         """
-        if (self.ndim == 3) & (self.axes[0] != 0): # The shapes to_labels() don't work in transposed dimensions; see issue #5505
-            show_info("ROIs don't work in transposed images!")
-            return None
-        else:
-            roi_mask = self.shapes_layer.to_labels().astype(np.uint8)
-                
-            if self.ndim == 3:
-                roi_mask = np.max(roi_mask.transpose(self.axes), axis=0)
-            
-            roi_mask = np.squeeze(roi_mask)
-            bbox = regionprops_table(roi_mask, properties=['bbox'])
+        roi_mask = self.shapes_layer.to_labels().astype(np.uint8)
 
-            for shape_idx in range(self.shapes_layer.nshapes):
-                x0 = int(bbox['bbox-0'][shape_idx])
-                y0 = int(bbox['bbox-1'][shape_idx])
-                x1 = int(bbox['bbox-2'][shape_idx])
-                y1 = int(bbox['bbox-3'][shape_idx])
+        if self.ndim == 3:
+            roi_mask = np.max(roi_mask.transpose(self.axes), axis=0)
 
-                image_data_slice_roi = self.image_data_slice[x0:x1, y0:y1].copy()
+        roi_mask = np.squeeze(roi_mask)
+        bbox = regionprops_table(roi_mask, properties=["bbox"])
 
-                roi_props = {
-                    "coords": [x0, x1, y0, y1],
-                    "roi": image_data_slice_roi
-                }
+        for shape_idx in range(self.shapes_layer.nshapes):
+            x0 = int(bbox["bbox-0"][shape_idx])
+            y0 = int(bbox["bbox-1"][shape_idx])
+            x1 = int(bbox["bbox-2"][shape_idx])
+            y1 = int(bbox["bbox-3"][shape_idx])
 
-                yield roi_props
+            image_data_slice_roi = self.image_data_slice[x0:x1, y0:y1].copy()
 
+            roi_props = {
+                "coords": [x0, x1, y0, y1],
+                "roi": image_data_slice_roi,
+            }
+
+            yield roi_props
 
     @thread_worker
     def _remove_background(self) -> np.ndarray:
         image_data_slice = self.image_data_slice.copy()
 
         if self.shapes_layer is not None:
-            image_data_slice = self.image_data_slice_roi.copy()
+            segmentation = np.zeros(
+                np.array(image_data_slice.shape)[:2], dtype=np.uint8
+            )
+            if (self.ndim == 3) & (
+                self.axes[0] != 0
+            ):  # The shapes to_labels() don't work in transposed dimensions; see issue #5505
+                show_info("ROIs don't work in transposed images!")
+            elif self.shapes_layer.nshapes == 0:
+                pass
+            else:
+                for roi_props in self.image_data_slice_rois():
+                    image_data_slice_roi_adjusted = roi_props["roi"]
+                    x0, x1, y0, y1 = roi_props["coords"]
 
-            
+                    if not self.image_layer.rgb:
+                        # Rescale the grayscale image to the range (0-255)
+                        image_data_slice_roi_adjusted = rescale_intensity(
+                            image_data_slice_roi_adjusted, out_range=(0, 255)
+                        )
 
-                
+                    segmentation_roi_adjusted = self.segmentation_function(
+                        image=image_data_slice_roi_adjusted
+                    )
+
+                    segmentation_roi_adjusted *= self.selected_label
+
+                    if self.check_label_increment.isChecked():
+                        self.selected_label = self.selected_label + 1
+
+                    segmentation[x0:x1, y0:y1] = segmentation_roi_adjusted
+        else:
+            if self.image_layer.rgb:
+                # Rescale the grayscale image to the range (0-255)
+                image_data_slice = rescale_intensity(
+                    image_data_slice, out_range=(0, 255)
+                )
+
+            segmentation = self.segmentation_function(image=image_data_slice)
+
         return segmentation
-    
+
     def _trigger_remove_background(self):
         if self.is_in_3d_view:
             return
-        
-        if self.cb_image.currentText() == '':
+
+        if self.cb_image.currentText() == "":
             return
-        
+
         self.image_layer = self.viewer.layers[self.cb_image.currentText()]
 
-        if self.cb_roi.currentText() != '':
+        if self.cb_roi.currentText() != "":
             self.shapes_layer = self.viewer.layers[self.cb_roi.currentText()]
         else:
             self.shapes_layer = None
 
-        if self.cb_result.currentText() == '':
+        if self.cb_result.currentText() == "":
             if self.image_layer.rgb is True:
-                self.labels_layer = self.viewer.add_labels(np.zeros_like(np.mean(self.image_data, axis=2), dtype=np.int_), name='Foreground mask')
+                self.labels_layer = self.viewer.add_labels(
+                    np.zeros_like(
+                        np.mean(self.image_data, axis=2), dtype=np.int_
+                    ),
+                    name="Foreground mask",
+                )
             else:
-                self.labels_layer = self.viewer.add_labels(np.zeros_like(self.image_data, dtype=np.int_), name='Foreground mask')
+                self.labels_layer = self.viewer.add_labels(
+                    np.zeros_like(self.image_data, dtype=np.int_),
+                    name="Foreground mask",
+                )
         else:
-            self.labels_layer = self.viewer.layers[self.cb_result.currentText()]
+            self.labels_layer = self.viewer.layers[
+                self.cb_result.currentText()
+            ]
 
         self.pbar.setMaximum(0)
 
@@ -256,7 +330,9 @@ class GenericSegWidget(QWidget):
             if self.ndim == 2:
                 self.labels_layer.data += segmentation
             elif self.ndim == 3:
-                self.labels_layer.data.transpose(self.axes)[self.current_step] += segmentation
+                self.labels_layer.data.transpose(self.axes)[
+                    self.current_step
+                ] += segmentation
 
             self.labels_layer.refresh()
 
