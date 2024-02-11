@@ -1,7 +1,4 @@
-from ._rembg_widget import RemBGWidget
-from ._rembg_widget_api import RemBGWidgetAPI
-from ._rembg_sam_widget import RemBGSAMWidget
+from .local_predictor_widget import LocalPredictorWidget
+from .remote_predictor_widget import RemotePredictorWidget
 
-__all__ = (
-    "RemBGWidget", "RemBGWidgetAPI", "RemBGSAMWidget"
-)
+__all__ = ("LocalPredictorWidget", "RemotePredictorWidget")

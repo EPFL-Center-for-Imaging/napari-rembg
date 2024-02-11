@@ -14,13 +14,11 @@ from qtpy.QtWidgets import (
     QCheckBox,
 )
 from qtpy.QtCore import Qt
-from skimage.measure import regionprops_table
-from napari.utils.notifications import show_info
 
 from skimage.exposure import rescale_intensity
 
 
-class GenericSegWidget(QWidget):
+class BaseSegmentationWidget(QWidget):
     def __init__(self, napari_viewer):
         super().__init__()
         self.viewer = napari_viewer
@@ -34,41 +32,50 @@ class GenericSegWidget(QWidget):
         grid_layout.setAlignment(Qt.AlignTop)
         self.setLayout(grid_layout)
 
+        # Model name
+        self.cb_model_name = QComboBox()
+        self.cb_model_name.addItems(["u2net", "sam", "silueta"])
+        self.cb_model_name.setSizePolicy(
+            QSizePolicy.Expanding, QSizePolicy.Fixed
+        )
+        grid_layout.addWidget(QLabel("Model", self), 1, 0)
+        grid_layout.addWidget(self.cb_model_name, 1, 1)
+
         # Image
         self.cb_image = QComboBox()
         self.cb_image.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        grid_layout.addWidget(QLabel("Image (2D / 3D / RGB)", self), 0, 0)
-        grid_layout.addWidget(self.cb_image, 0, 1)
+        grid_layout.addWidget(QLabel("Image (2D / 3D / RGB)", self), 2, 0)
+        grid_layout.addWidget(self.cb_image, 2, 1)
 
         # Result
         self.cb_result = QComboBox()
         self.cb_result.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        grid_layout.addWidget(QLabel("Mask (Labels, optional)", self), 1, 0)
-        grid_layout.addWidget(self.cb_result, 1, 1)
+        grid_layout.addWidget(QLabel("Mask (Labels, optional)", self), 3, 0)
+        grid_layout.addWidget(self.cb_result, 3, 1)
 
         # Regions of interest
         self.cb_roi = QComboBox()
         self.cb_roi.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        grid_layout.addWidget(QLabel("ROIs (Shapes, optional)", self), 2, 0)
-        grid_layout.addWidget(self.cb_roi, 2, 1)
+        grid_layout.addWidget(QLabel("ROIs (Shapes, optional)", self), 4, 0)
+        grid_layout.addWidget(self.cb_roi, 4, 1)
         self.create_roi_layer_btn = QPushButton("Add", self)
         self.create_roi_layer_btn.clicked.connect(self._create_roi_layer)
-        grid_layout.addWidget(self.create_roi_layer_btn, 2, 2)
+        grid_layout.addWidget(self.create_roi_layer_btn, 4, 2)
 
-        grid_layout.addWidget(QLabel("Auto-increment label index", self), 3, 0)
+        grid_layout.addWidget(QLabel("Auto-increment label index", self), 5, 0)
         self.check_label_increment = QCheckBox()
         self.check_label_increment.setChecked(True)
-        grid_layout.addWidget(self.check_label_increment, 3, 1)
+        grid_layout.addWidget(self.check_label_increment, 5, 1)
 
         # Compute button
         self.run_btn = QPushButton("Run", self)
         self.run_btn.clicked.connect(self._trigger_remove_background)
-        grid_layout.addWidget(self.run_btn, 4, 0, 1, 2)
+        grid_layout.addWidget(self.run_btn, 6, 0, 1, 2)
 
         # Progress bar
         self.pbar = QProgressBar(self, minimum=0, maximum=1)
         self.pbar.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        grid_layout.addWidget(self.pbar, 5, 0, 1, 2)
+        grid_layout.addWidget(self.pbar, 7, 0, 1, 2)
 
         # Setup layer callbacks
         self.viewer.layers.events.inserted.connect(
@@ -79,10 +86,6 @@ class GenericSegWidget(QWidget):
         self._on_layer_change(None)
 
         self.viewer.dims.events.current_step.connect(self._on_slice_change)
-
-    @property
-    def segmentation_function(self, image):
-        return lambda image: np.zeros_like(image, dtype=np.uint8)
 
     @property
     def image_data(self):
@@ -136,10 +139,20 @@ class GenericSegWidget(QWidget):
             return
 
         if self.ndim == 2:
-            return self.image_data
+            if self.image_layer.rgb:
+                return self.image_data
+            else:
+                return rescale_intensity(
+                    self.image_data, out_range=(0, 255)
+                ).astype(np.uint8)
 
         elif self.ndim == 3:
-            return self.image_data.transpose(self.axes)[self.current_step]
+            data_slice = self.image_data.transpose(self.axes)[
+                self.current_step
+            ]
+            return rescale_intensity(data_slice, out_range=(0, 255)).astype(
+                np.uint8
+            )
 
     @property
     def selected_label(self):
@@ -155,6 +168,11 @@ class GenericSegWidget(QWidget):
 
         self.labels_layer.selected_label = selected_label
         self.labels_layer.refresh()
+
+    def segmentation_function(
+        self, image: np.ndarray, model_name: str = "u2net"
+    ):
+        raise NotImplementedError
 
     def _create_roi_layer(self):
         self.shapes_layer = self.viewer.add_shapes(
@@ -213,76 +231,49 @@ class GenericSegWidget(QWidget):
             self.shapes_layer.data = []
             self.shapes_layer.refresh()
 
-    def image_data_slice_rois(self):
-        """
-        Yields all the ROIs of the Shapes layer.
-        """
-        roi_mask = self.shapes_layer.to_labels().astype(np.uint8)
-
-        if self.ndim == 3:
-            roi_mask = np.max(roi_mask.transpose(self.axes), axis=0)
-
-        roi_mask = np.squeeze(roi_mask)
-        bbox = regionprops_table(roi_mask, properties=["bbox"])
-
-        for shape_idx in range(self.shapes_layer.nshapes):
-            x0 = int(bbox["bbox-0"][shape_idx])
-            y0 = int(bbox["bbox-1"][shape_idx])
-            x1 = int(bbox["bbox-2"][shape_idx])
-            y1 = int(bbox["bbox-3"][shape_idx])
-
-            image_data_slice_roi = self.image_data_slice[x0:x1, y0:y1].copy()
-
-            roi_props = {
-                "coords": [x0, x1, y0, y1],
-                "roi": image_data_slice_roi,
-            }
-
-            yield roi_props
-
     @thread_worker
     def _remove_background(self) -> np.ndarray:
-        image_data_slice = self.image_data_slice.copy()
-
         if self.shapes_layer is not None:
-            segmentation = np.zeros(
-                np.array(image_data_slice.shape)[:2], dtype=np.uint8
-            )
-            if (self.ndim == 3) & (
-                self.axes[0] != 0
-            ):  # The shapes to_labels() don't work in transposed dimensions; see issue #5505
-                show_info("ROIs don't work in transposed images!")
-            elif self.shapes_layer.nshapes == 0:
-                pass
-            else:
-                for roi_props in self.image_data_slice_rois():
-                    image_data_slice_roi_adjusted = roi_props["roi"]
-                    x0, x1, y0, y1 = roi_props["coords"]
+            if self.shapes_layer.nshapes == 0:
+                return
 
-                    if not self.image_layer.rgb:
-                        # Rescale the grayscale image to the range (0-255)
-                        image_data_slice_roi_adjusted = rescale_intensity(
-                            image_data_slice_roi_adjusted, out_range=(0, 255)
-                        )
+            # With just the rectangle coordinates
+            shapes_data = self.shapes_layer.data[0].astype(int)
+            if self.ndim == 3:
+                shapes_data = shapes_data[:, self.axes][:, 1:]
 
-                    segmentation_roi_adjusted = self.segmentation_function(
-                        image=image_data_slice_roi_adjusted
-                    )
+            top_left = shapes_data[np.argmin(np.sum(shapes_data, axis=1))]
+            x0, y0 = top_left
+            bottom_right = shapes_data[np.argmax(np.sum(shapes_data, axis=1))]
+            x1, y1 = bottom_right
+            bounding_box = [x0, y0, x1, y1]
 
-                    segmentation_roi_adjusted *= self.selected_label
-
-                    if self.check_label_increment.isChecked():
-                        self.selected_label = self.selected_label + 1
-
-                    segmentation[x0:x1, y0:y1] = segmentation_roi_adjusted
         else:
-            if self.image_layer.rgb:
-                # Rescale the grayscale image to the range (0-255)
-                image_data_slice = rescale_intensity(
-                    image_data_slice, out_range=(0, 255)
-                )
+            bounding_box = [
+                0,
+                0,
+                self.image_data_slice.shape[0],
+                self.image_data_slice.shape[1],
+            ]
 
-            segmentation = self.segmentation_function(image=image_data_slice)
+        model_name = self.cb_model_name.currentText()
+        segmentation = np.zeros(
+            np.array(self.image_data_slice.shape)[:2], dtype=np.uint8
+        )
+        x0, y0, x1, y1 = bounding_box
+        image_crop = self.image_data_slice[x0:x1, y0:y1]
+
+        segmentation_crop = self.segmentation_function(
+            image=image_crop,
+            model_name=model_name,
+        )
+
+        segmentation[x0:x1, y0:y1] = segmentation_crop
+
+        segmentation *= self.selected_label
+
+        if self.check_label_increment.isChecked():
+            self.selected_label = self.selected_label + 1
 
         return segmentation
 

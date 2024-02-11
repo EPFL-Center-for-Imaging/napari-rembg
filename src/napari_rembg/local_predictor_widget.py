@@ -1,8 +1,7 @@
 from ._rembg import rembg_predict
-from ._generic_seg_widget import GenericSegWidget
+from ._base_segmentation_widget import BaseSegmentationWidget
 
-
-class RemBGWidget(GenericSegWidget):
+class LocalPredictorWidget(BaseSegmentationWidget):
     def __init__(self, napari_viewer):
         super().__init__(napari_viewer)
     

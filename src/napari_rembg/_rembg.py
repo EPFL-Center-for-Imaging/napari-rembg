@@ -1,24 +1,44 @@
 import rembg
+import numpy as np
 
-def rembg_predict(image):
-    """Binary segmentation using rembg."""
-    return rembg.remove(
-        image, 
-        only_mask=True, 
-        post_process_mask=True,
-    ).copy()  # copy() makes the array writeable
+# We keep the sessions open if the user switches model
+sessions: dict[str, rembg.sessions.BaseSession] = {}
 
 
-def rembg_predict_sam(image, input_labels=None, input_points=None):
-    """Binary segmentation using rembg."""
-    sam_session = rembg.new_session(model_name='sam')
+def rembg_predict(image: np.ndarray, model_name: str) -> np.ndarray:
+    """
+    Wrapper function around `rembg.remove` - handling both SAM and non-SAM models.
+    """
+    session = sessions.setdefault(model_name, rembg.new_session(model_name))
 
-    prompt = [{"type": "point", "data": list(point), "label": int(label)} for point, label in zip(input_points, input_labels)]
+    if model_name == "sam":
+        x0, y0, x1, y1 = 0, 0, image.shape[0], image.shape[1]
 
-    return rembg.remove(
-        image, 
-        only_mask=True, 
-        post_process_mask=True,
-        session=sam_session,
-        sam_prompt=prompt
-    ).copy()  # copy() makes the array writeable
+        prompt = [
+            {
+                "type": "rectangle",
+                "data": [y0, x0, y1, x1],
+                "label": 2,  # `label` is irrelevant for SAM in bounding boxes mode
+            }
+        ]
+
+        segmentation = rembg.remove(
+            data=image,
+            session=session,
+            only_mask=True,
+            post_process_mask=True,
+            sam_prompt=prompt,
+        ).copy()  # copy() makes the array writeable
+        segmentation = (segmentation == 0).astype(
+            np.uint8
+        )  # Invert it (for some reason)
+
+    else:
+        segmentation = rembg.remove(
+            data=image,
+            session=session,
+            only_mask=True,
+            post_process_mask=True,
+        ).copy()  # copy() makes the array writeable
+
+    return segmentation

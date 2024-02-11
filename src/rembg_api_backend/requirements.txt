@@ -1,5 +1,0 @@
-tifffile==2023.9.26
-fastapi
-uvicorn[standard]
-python-multipart
-rembg

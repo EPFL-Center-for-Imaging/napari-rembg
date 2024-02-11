@@ -1,23 +1,18 @@
 name: napari-rembg
-display_name: Napari Select foreground
+display_name: Napari Select Foreground
 contributions:
   commands:
-    - id: napari-rembg.rembg
+    - id: napari-rembg.local
       title: Select foreground
-      python_name: napari_rembg:RemBGWidget
-    - id: napari-rembg.rembg_api
-      title: Select foreground (API)
-      python_name: napari_rembg:RemBGWidgetAPI
-    - id: napari-rembg.rembg_sam
-      title: Select foreground (SAM)
-      python_name: napari_rembg:RemBGSAMWidget
+      python_name: napari_rembg:LocalPredictorWidget
+    - id: napari-rembg.remote
+      title: Select foreground (Remote)
+      python_name: napari_rembg:RemotePredictorWidget
   widgets:
-    - command: napari-rembg.rembg
+    - command: napari-rembg.local
       display_name: Select foreground
-    - command: napari-rembg.rembg_api
-      display_name: Select foreground (API)
-    - command: napari-rembg.rembg_sam
-      display_name: Select foreground (SAM)
+    - command: napari-rembg.remote
+      display_name: Select foreground (Remote)
   sample_data:
     - key: napari
       display_name: Tabueran Kiribati

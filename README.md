@@ -7,20 +7,46 @@ Select the foreground of images using AI in Napari. This plugin is based on the 
     <img src="https://github.com/EPFL-Center-for-Imaging/napari-rembg/blob/main/assets/demo.gif" height="400">
 </p>
 
-### Why use `napari-rembg`?
+## Features
+
+**Included**
+
+- Segment Anything Model (SAM) *and* other generalist models (U2-Net, Silueta...) that can be more lightweight or faster.
+- Segmentation of a whole image or in individual bounding boxes
+- Segmentation in individual slices of 3D images viewed in any orientation.
+- Running the `rembg` microservice in a web API (using FastAPI), for example on a remote machine with GPU.
+
+**Not included**
+- The exotic SAM versions (FastSAM, MicroSAM, etc.)
+- "True" 3D segmentation, not only slice-by-slice
+
+## Why use `napari-rembg`?
 - It runs **fast** even on a laptop's CPU (a few seconds per image).
 - It is **easy to install** compared to other AI tools for segmentation.
 - It is a **quick and easy** solution to automatically extract the foreground of scientific and natural images.
 
 This plugin is primarily intended for analyzing **2D** and **2D (RGB)** images, however it can also be used to segment a particular slice in a **2D + time**, **2D + channel** or **3D** image.
 
-## New!
+## Related projects
 
-Run `rembg` in individual regions of interest defined by bounding boxes to segment multiple objects:
+Our project is similar but different to these projects:
+
+- [napari-sam]()
+- [napari-segment-anything]()
+
+## Segmentation of a whole image
+
+Just press "Segment".
+
+## Segmentation in annotated bounding boxes
+
+Run `rembg` in individual regions of interest to segment multiple objects:
 
 <p align="center">
     <img src="https://github.com/EPFL-Center-for-Imaging/napari-rembg/blob/main/assets/screenshot.gif" height="400">
 </p>
+
+**Options and parameters**
 
 - Insert a `Shapes` layer and **draw rectangles** to define regions of interest (ROIs) in which to run the foreground selection. You can choose to auto-increment the label index to distinguish objects in different ROIs.
 - Select the `Labels` layer in which to write the output of the foreground segmentation (or let the plugin create a `Labels` layer automatically).
