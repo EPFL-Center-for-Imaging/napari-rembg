@@ -1,5 +1,7 @@
 # `rembg` API in docker
 
+## On the `host` machine
+
 **Prerequisites**
 
 Make sure to have installed [`docker`](https://docker.com/) on your system.
@@ -15,6 +17,8 @@ docker build -t $(whoami)/rembg-api .
 ```
 docker run -it -dp 7000:7000 --ipc=host --name rembg-api $(whoami)/rembg-api:latest
 ```
+
+## On the `client` machine
 
 **Start `napari`**
 
@@ -32,4 +36,4 @@ Open the plugin's remote segmentation widget:
 Plugins > Napari Select Foreground > Select foreground (Web API)
 ```
 
-Make sure the `Network` and `port` parameters are correctly set up.
+Make sure the `Network` and `Port` parameters are correctly set up (they should point to where the docker container is running).
