@@ -6,13 +6,13 @@ contributions:
       title: Select foreground
       python_name: napari_rembg:LocalPredictorWidget
     - id: napari-rembg.remote
-      title: Select foreground (Remote)
+      title: Select foreground (Web API)
       python_name: napari_rembg:RemotePredictorWidget
   widgets:
     - command: napari-rembg.local
       display_name: Select foreground
     - command: napari-rembg.remote
-      display_name: Select foreground (Remote)
+      display_name: Select foreground (Web API)
   sample_data:
     - key: napari
       display_name: Tabueran Kiribati

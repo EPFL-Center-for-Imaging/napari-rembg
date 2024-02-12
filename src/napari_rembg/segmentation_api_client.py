@@ -23,8 +23,7 @@ class SegmentationAPIClient:
     def _encode_contents(self, image):
         if len(image.shape) == 2:
             image = np.repeat(image[..., None], 3, axis=-1)
-            # image = image.astype(np.uint8)
-        # print(image.shape, image.dtype)
+
         pil_image = Image.fromarray(image)
         buffer = io.BytesIO()
         pil_image.save(buffer, format='PNG')
@@ -55,7 +54,6 @@ class SegmentationAPIClient:
                     "ppm": True,  # Post-process mask
                 },
                 params={
-                    "bgc": "255,255,128,0",
                     "extras": json.dumps({"sam_prompt": prompt})
                 }
             )
@@ -72,23 +70,26 @@ class SegmentationAPIClient:
 
 
         if response.status_code == 200:
-            contents = self._decode_contents(response.content)
+            segmentation = self._decode_contents(response.content)
             if model_name == 'sam':
-                contents = (contents == 0).astype(np.uint8) # Invert it (for some reason)
+                segmentation = (segmentation == 0) # Invert it (for some reason)
+            else:
+                segmentation = (segmentation == 255)
         else:
             print(f"{response.status_code=}")
             import sys
 
             sys.exit(1)  # Is that too brutal?
 
-        return contents
+        segmentation = segmentation.astype(np.uint8)
+
+        return segmentation
 
 
 if __name__=='__main__':
     client = SegmentationAPIClient(endpoint="http://localhost:7000/api/remove")
 
-    image = np.asarray(Image.open('/home/wittwer/code/napari_plugins/napari-rembg/data/car-1.jpg'))
-    # image = np.mean(image, axis=-1).astype(np.uint8)
+    image = np.asarray(Image.open('./data/car-1.jpg'))
     print(f"{image.shape=}")
 
     out = client.predict_via_api(image, model_name='sam')

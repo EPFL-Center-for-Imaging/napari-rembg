@@ -7,7 +7,7 @@ sessions: dict[str, rembg.sessions.BaseSession] = {}
 
 def rembg_predict(image: np.ndarray, model_name: str) -> np.ndarray:
     """
-    Wrapper function around `rembg.remove` - handling both SAM and non-SAM models.
+    Wrapper function around `rembg.remove` - handling both SAM and regular models.
     """
     session = sessions.setdefault(model_name, rembg.new_session(model_name))
 
@@ -28,10 +28,8 @@ def rembg_predict(image: np.ndarray, model_name: str) -> np.ndarray:
             only_mask=True,
             post_process_mask=True,
             sam_prompt=prompt,
-        ).copy()  # copy() makes the array writeable
-        segmentation = (segmentation == 0).astype(
-            np.uint8
-        )  # Invert it (for some reason)
+        )
+        segmentation = (segmentation == 0)  # Invert it (for some reason)
 
     else:
         segmentation = rembg.remove(
@@ -39,6 +37,9 @@ def rembg_predict(image: np.ndarray, model_name: str) -> np.ndarray:
             session=session,
             only_mask=True,
             post_process_mask=True,
-        ).copy()  # copy() makes the array writeable
+        )
+        segmentation = (segmentation == 255)
+
+    segmentation = segmentation.astype(np.uint8)
 
     return segmentation
