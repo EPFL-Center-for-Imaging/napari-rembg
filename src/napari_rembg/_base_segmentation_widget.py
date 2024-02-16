@@ -13,6 +13,7 @@ from qtpy.QtWidgets import (
     QProgressBar,
     QCheckBox,
 )
+from napari.utils.notifications import show_error
 from qtpy.QtCore import Qt
 
 from skimage.exposure import rescale_intensity
@@ -20,6 +21,7 @@ from skimage.exposure import rescale_intensity
 from typing import Optional, List, Callable
 
 MODELS = ["u2net", "u2netp", "sam", "silueta", "isnet-general-use"]
+
 
 class BaseSegmentationWidget(QWidget):
     def __init__(self, napari_viewer):
@@ -38,7 +40,9 @@ class BaseSegmentationWidget(QWidget):
         # Model selection
         self.cb_model_name = QComboBox()
         self.cb_model_name.addItems(MODELS)
-        self.cb_model_name.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.cb_model_name.setSizePolicy(
+            QSizePolicy.Expanding, QSizePolicy.Fixed
+        )
         grid_layout.addWidget(QLabel("Model", self), 1, 0)
         grid_layout.addWidget(self.cb_model_name, 1, 1)
 
@@ -87,7 +91,10 @@ class BaseSegmentationWidget(QWidget):
         self.viewer.layers.events.removed.connect(self._on_layer_change)
         self._on_layer_change(None)
 
-        self.viewer.dims.events.current_step.connect(self._on_slice_change)
+        import tifffile
+
+        img = tifffile.imread("/home/wittwer/data/test_images/crop.tif")
+        self.viewer.add_image(img)
 
     @property
     def image_data(self) -> Optional[np.ndarray]:
@@ -125,7 +132,9 @@ class BaseSegmentationWidget(QWidget):
 
         axes = self.dims_displayed
         if self.ndim == 3:
-            axes.insert(0, list(set(range(self.ndim)) - set(self.dims_displayed))[0])
+            axes.insert(
+                0, list(set(range(self.ndim)) - set(self.dims_displayed))[0]
+            )
 
         return axes
 
@@ -171,7 +180,9 @@ class BaseSegmentationWidget(QWidget):
         self.labels_layer.selected_label = selected_label
         self.labels_layer.refresh()
 
-    def segmentation_function(self, image: np.ndarray, model_name: str) -> Callable:
+    def segmentation_function(
+        self, image: np.ndarray, model_name: str
+    ) -> Callable:
         raise NotImplementedError
 
     def _create_roi_layer(self):
@@ -187,17 +198,14 @@ class BaseSegmentationWidget(QWidget):
         )
         self.shapes_layer.mode = "add_rectangle"
         self.shapes_layer.refresh()
-        self.n_rectangles_drawn = self.shapes_layer.nshapes
 
         # Add a call to trigger the segmentation when new rectangles are drawn.
         self.shapes_layer.events.data.connect(self._handle_rectangle_drawn)
 
     def _handle_rectangle_drawn(self, e):
         """Trigger the segmentation when the bounding box is drawn."""
-        n_rectangles_drawn = e.source.nshapes
-        if n_rectangles_drawn != self.n_rectangles_drawn:
+        if e.source.nshapes > 0:
             self._trigger_remove_background()
-            self.n_rectangles_drawn = n_rectangles_drawn
 
     def _on_layer_change(self, e):
         self.cb_image.clear()
@@ -215,9 +223,7 @@ class BaseSegmentationWidget(QWidget):
                 self.cb_mask.addItem(x.name, x.data)
 
         if self.cb_mask.currentText() != "":
-            self.labels_layer = self.viewer.layers[
-                self.cb_mask.currentText()
-            ]
+            self.labels_layer = self.viewer.layers[self.cb_mask.currentText()]
 
         self.cb_roi.clear()
         for x in self.viewer.layers:
@@ -227,21 +233,14 @@ class BaseSegmentationWidget(QWidget):
         if self.cb_roi.currentText() != "":
             self.shapes_layer = self.viewer.layers[self.cb_roi.currentText()]
 
-    def _on_slice_change(self, event):
-        """In 3D mode, reset the ROI layer on slice change."""
-        if self.shapes_layer is not None:
-            self.shapes_layer.data = []
-            self.shapes_layer.refresh()
-
     @thread_worker
     def _remove_background(self) -> np.ndarray:
         rx, ry = self.image_data_slice.shape[:2]
-        
+
         if self.shapes_layer is not None:
             if self.shapes_layer.nshapes == 0:
                 return
 
-            # With just the rectangle coordinates
             shapes_data = self.shapes_layer.data[0].astype(int)
             if self.ndim == 3:
                 shapes_data = shapes_data[:, self.axes][:, 1:]
@@ -250,7 +249,7 @@ class BaseSegmentationWidget(QWidget):
             x0, y0 = shapes_data[np.argmin(np.sum(shapes_data, axis=1))]
 
             # Bottom-right corner
-            x1, y1  = shapes_data[np.argmax(np.sum(shapes_data, axis=1))]
+            x1, y1 = shapes_data[np.argmax(np.sum(shapes_data, axis=1))]
 
         else:
             x0, y0, x1, y1 = 0, 0, rx, ry
@@ -262,22 +261,24 @@ class BaseSegmentationWidget(QWidget):
         y1 = min(y1, ry)
 
         segmentation = np.zeros((rx, ry), dtype=np.uint8)
-
-        image_crop = self.image_data_slice[x0:x1, y0:y1]
-
-        segmentation_crop = self.segmentation_function(
-            image=image_crop,
+        segmentation_output = self.segmentation_function(
+            image=self.image_data_slice[x0:x1, y0:y1],
             model_name=self.cb_model_name.currentText(),
         )
+        if segmentation_output is not None:
+            segmentation[x0:x1, y0:y1] = segmentation_output*self.selected_label
 
-        segmentation[x0:x1, y0:y1] = segmentation_crop
+            # Increment the label index
+            if self.check_label_increment.isChecked():
+                self.selected_label = self.selected_label + 1
+        else:
+            show_error('Something went wrong with this API.')
 
-        # Set the segmentation to the correct label index
-        segmentation *= self.selected_label
+        # Remove the shapes data
+        if self.shapes_layer is not None:
+            self.shapes_layer.data = []
 
-        # Increment the label index
-        if self.check_label_increment.isChecked():
-            self.selected_label = self.selected_label + 1
+        self.pbar.setMaximum(1)
 
         return segmentation
 
@@ -308,9 +309,7 @@ class BaseSegmentationWidget(QWidget):
                     name="Foreground mask",
                 )
         else:
-            self.labels_layer = self.viewer.layers[
-                self.cb_mask.currentText()
-            ]
+            self.labels_layer = self.viewer.layers[self.cb_mask.currentText()]
 
         self.pbar.setMaximum(0)
 
@@ -329,9 +328,7 @@ class BaseSegmentationWidget(QWidget):
 
             self.labels_layer.refresh()
 
-        # Remove the shapes data
-        if self.shapes_layer is not None:
-            self.shapes_layer.data = []
-            self.viewer.layers.selection.active = self.shapes_layer
+            if self.shapes_layer is not None:
+                self.viewer.layers.selection.active = self.shapes_layer
 
-        self.pbar.setMaximum(1)
+            self.pbar.setMaximum(1)

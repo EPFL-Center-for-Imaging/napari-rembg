@@ -44,30 +44,36 @@ class SegmentationAPIClient:
                     "label": 2  # Irrelevant for sam with bounding boxes
                 }
             ]
-            
-            response = requests.post(
-                self._endpoint, 
-                files=files, 
-                data={
-                    "model": model_name,
-                    "om": True,  # Only mask
-                    "ppm": True,  # Post-process mask
-                },
-                params={
-                    "extras": json.dumps({"sam_prompt": prompt})
-                }
-            )
+            try:
+                response = requests.post(
+                    self._endpoint, 
+                    files=files, 
+                    data={
+                        "model": model_name,
+                        "om": True,  # Only mask
+                        "ppm": True,  # Post-process mask
+                    },
+                    params={
+                        "extras": json.dumps({"sam_prompt": prompt})
+                    }
+                )
+            except:
+                print(f"Could not connect to this endpoint: {self._endpoint}")
+                return
         else:
-            response = requests.post(
-                self._endpoint, 
-                files=files, 
-                data={
-                    "model": model_name,
-                    "om": True,  # Only mask
-                    "ppm": True  # Post-process mask
-                }
-            )
-
+            try:
+                response = requests.post(
+                    self._endpoint, 
+                    files=files, 
+                    data={
+                        "model": model_name,
+                        "om": True,  # Only mask
+                        "ppm": True  # Post-process mask
+                    }
+                )
+            except:
+                print(f"Could not connect to this endpoint: {self._endpoint}")
+                return
 
         if response.status_code == 200:
             segmentation = self._decode_contents(response.content)
@@ -76,10 +82,8 @@ class SegmentationAPIClient:
             else:
                 segmentation = (segmentation == 255)
         else:
-            print(f"{response.status_code=}")
-            import sys
-
-            sys.exit(1)  # Is that too brutal?
+            print(f"Unsuccessful status: {response.status_code=}")
+            return
 
         segmentation = segmentation.astype(np.uint8)
 

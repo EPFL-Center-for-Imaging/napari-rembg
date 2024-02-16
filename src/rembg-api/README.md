@@ -18,6 +18,22 @@ docker build -t $(whoami)/rembg-api .
 docker run -it -dp 7000:7000 --ipc=host --name rembg-api $(whoami)/rembg-api:latest
 ```
 
+**Keeping the models in a docker volume**
+
+If you are removing and re-creating containers often, consider mounting a volume in which to keep the downloaded models, so that they don't get re-downloaded everytime.
+
+Create a docker volume:
+
+```
+docker volume create rembg_models
+```
+
+Run a container with the attached volume:
+
+```
+docker run -it -dp 7000:7000 -v rembg_models:~/.u2net/ --ipc=host --name rembg-api $(whoami)/rembg-api:latest
+```
+
 ## On the `client` machine
 
 **Start `napari`**
