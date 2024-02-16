@@ -91,11 +91,6 @@ class BaseSegmentationWidget(QWidget):
         self.viewer.layers.events.removed.connect(self._on_layer_change)
         self._on_layer_change(None)
 
-        import tifffile
-
-        img = tifffile.imread("/home/wittwer/data/test_images/crop.tif")
-        self.viewer.add_image(img)
-
     @property
     def image_data(self) -> Optional[np.ndarray]:
         """The image data."""
